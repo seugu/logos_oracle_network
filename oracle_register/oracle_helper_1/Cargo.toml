@@ -1,0 +1,11 @@
+[package]
+name = "oracle_helper_1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+sha2 = "0.10.9"
+spel-framework = { git = "https://github.com/logos-co/spel.git", branch = "main" }
+risc0-zkvm = { version = "=3.0.5", features = ["std", "getrandom"] }
+hex = "0.4.3"

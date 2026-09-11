@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "oracle_prices_core",
+    "oracle_prices_ffi",
+    "methods",
+    "examples",
+]
+exclude = [
+    "methods/guest",
+]
+resolver = "2"

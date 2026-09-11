@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "oracle_register_core",
+    "oracle_register_ffi",
+    "methods",
+    "examples",
+    "oracle_helper_1",
+]
+exclude = [
+    "methods/guest",
+]
+resolver = "2"

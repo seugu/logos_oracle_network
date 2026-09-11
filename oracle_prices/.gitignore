@@ -1,0 +1,8 @@
+target/
+methods/guest/target/
+*.bin
+.oracle_prices-state
+.oracle_prices-state.tmp
+ui/
+
+.idea

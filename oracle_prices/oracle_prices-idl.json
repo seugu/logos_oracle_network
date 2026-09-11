@@ -1,0 +1,186 @@
+{
+  "version": "0.1.0",
+  "name": "oracle_prices",
+  "instructions": [
+    {
+      "name": "initialize",
+      "accounts": [
+        {
+          "name": "oracle_prices_account",
+          "writable": true,
+          "signer": false,
+          "init": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_feed",
+      "accounts": [
+        {
+          "name": "oracle_prices_account",
+          "writable": true,
+          "signer": false,
+          "init": false,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices"
+              }
+            ]
+          }
+        },
+        {
+          "name": "feed_price",
+          "writable": true,
+          "signer": false,
+          "init": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices__"
+              },
+              {
+                "kind": "arg",
+                "path": "feed_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "publish_price",
+      "accounts": [
+        {
+          "name": "feed_price",
+          "writable": true,
+          "signer": false,
+          "init": false,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices__"
+              },
+              {
+                "kind": "arg",
+                "path": "feed_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "decimals",
+          "type": "u32"
+        },
+        {
+          "name": "valid_count",
+          "type": "u32"
+        },
+        {
+          "name": "round",
+          "type": "u64"
+        },
+        {
+          "name": "confidence",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "OraclePricesState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "feeds",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "decimals",
+            "type": "u32"
+          },
+          {
+            "name": "valid_count",
+            "type": "u32"
+          },
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "confidence",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

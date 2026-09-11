@@ -7,7 +7,7 @@ pub struct IndexerArgs {
     /// Logos blockchain node HTTP endpoint
     #[arg(
         long,
-        default_value = "http://localhost:8080",
+        default_value = "http://localhost:18080",
         env = "INDEXER_NODE_ENDPOINT"
     )]
     pub node_url: String,

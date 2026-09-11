@@ -1,161 +1,144 @@
-# Logos Oracle Network (LON)
+# LON Oracle — Local macOS Setup
 
-## LEZ dev setup
+A local, end-to-end deployment of the LON oracle stack: LEZ (standalone) +
+Logos blockchain (docker) + `oracle_register` + `oracle_prices` + the
+`sequencer`/`indexer` off-chain nodes, publishing a live BTC/USDT price.
 
-* Base: Ubuntu 24.04 + rustup + docker
+## What's in here
 
-* to install: sudo apt install unzip python3.12-dev pkgconf libpcsclite-dev
-* From tutorial.md in https://github.com/logos-co/spel/pull/138
-  * RISC0 toolchain: https://dev.risczero.com/api/zkvm/install
-  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cd spel` && `git checkout v0.6.0`  && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
-  * Compile logos execution zone: `git clone https://github.com/logos-blockchain/logos-execution-zone.git && cd logos-execution-zone && git checkout v0.2.0`
-    * Find the logos execution zone version in spel/spel-framework/Cargo.toml
-    * Compile: `cargo build --release --features standalone -p sequencer_service` && `cargo build --release -p wallet`
-  * Add spel & logos exec zone bin into $PATH: `vim ~/.bashrc` && set to `export PATH="$PATH:/home/ubuntu/.risc0/bin:/home/ubuntu/logos-execution-zone/target/release/:/home/ubuntu/spel/target/debug`
-  * Test the setup: `wallet --version`, `spel --version`
+This repo's own code (`oracle_register/`, `oracle_prices/`, `oracle_node/`,
+etc.) lives at the root, same as any other clone. Alongside it:
 
-## Launch the logos execution zone
+```
+check_prereqs_mac.sh         step -1: verify/install required tools
+0_build_toolchain.sh         step 0:  fetch dependencies, build spel / wallet /
+                                       LEZ sequencer_service
+1_start_lez.sh               step 1:  terminal 1 — native LEZ
+2_start_logos_blockchain.sh  step 2:  terminal 2 — Logos blockchain (docker)
+3_bootstrap_deploy.sh        step 3:  terminal 3 — one-time: accounts + deploy
+4_run_sequencer_indexer.sh   step 4:  terminal 3 — every session: run the nodes
+5_check_price.sh             step 5:  verify: read the live price back from LEZ
+```
 
-RUST_LOG=info cargo run --features standalone -p sequencer_service -- lez/sequencer/service/configs/debug/sequencer_config.json
+`spel/`, `logos-execution-zone/`, `lez-programs/`, and
+`oracle_node/logos-blockchain/` are external dependencies this project
+builds against, not part of this repo's own history — `0_build_toolchain.sh`
+clones them automatically on first run, straight into the repo root (see
+`.gitignore`).
 
-Note: 
-* reset sequencer: `rm -rf logos-execution-zone/rocksdb`
+## Setup, in order
 
-## Wallet
+```bash
+git clone <this repo>
+cd <this repo>
+chmod +x *.sh
 
-* Create a public account
-  * `wallet account new public`
-* List accounts
-  * `wallet account list`
+./check_prereqs_mac.sh      # checks Homebrew, Rust, protoc, Docker, RISC0
+./0_build_toolchain.sh      # clones spel/logos-execution-zone/lez-programs/
+                             # logos-blockchain, then builds spel/wallet/LEZ
+```
 
-Note:
-* delete wallet info: `rm -rf ~/.lee`
+Then open **three terminals**, all `cd`'d into this same directory:
 
-## Deploy contract & interact with
+| Terminal | Command | What it does |
+|---|---|---|
+| 1 | `./1_start_lez.sh` | Native LEZ (standalone), foreground. Leave running. |
+| 2 | `./2_start_logos_blockchain.sh` | Logos blockchain (docker), foreground. Leave running. |
+| 3 | `./3_bootstrap_deploy.sh` *(once)*, then `./4_run_sequencer_indexer.sh` | Wallet accounts, token, `oracle_register`, `oracle_prices` deploy — then the sequencer (background) and indexer (foreground). |
 
-* make deploy
-  * OR (manual way): `wallet deploy-program methods/guest/target/riscv32im-risc0-zkvm-elf/docker/my_counter.bin`
-  * Sequencer logs: `Validated transaction with hash c8f138b1d34ba952978fcf86bcb53119c0c6f3ed10287bb36534de6d649f5aea, including it in block`
-* init contract: 
-  * `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
-* increment contract:
-  * `spel increment --amount 5 --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
-* read counter:
-  * `spel pda counter`
-  * `spel inspect "G1gkRm62LdJ2XWpj5NBHeHgdNgjrzqQuPnW4CL8GqNjm" --type CounterState`
+`3_bootstrap_deploy.sh` only needs terminal 1 (LEZ) to be up; it does **not**
+need terminal 2 yet. Start terminal 2 before running
+`4_run_sequencer_indexer.sh`, since that one needs both LEZ and Logos
+blockchain.
 
-## Oracle register contract
+`3_bootstrap_deploy.sh` is idempotent — every on-chain step checks whether
+it already happened before doing it again, so re-running it after a partial
+failure is safe.
 
-### Build
+## Confirming it worked
 
-* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
-* Faster dev build (still requires the CARGO_TARGET_DIR export):
-  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
-* Generate idl
-  * `spel generate-idl methods/guest/src/bin/oracle_register.rs > oracle_register-idl.json`
+Once terminal 3 shows lines like:
 
-### Deploy
+```
+[Feed BTC/USDT] Attested round N: Price ..., Count 1
+Successfully published attested price to oracle pices contract :-) :-D !!!
+```
 
-* Copy file
-  * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
-  * dev build: `cp -v /home/ubuntu/local_target/oracle_register/riscv-guest/oracle_register-methods/oracle_register-guest/riscv32im-risc0-zkvm-elf/release/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin`
-* `make deploy`
-* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3 --token-program-id 0,0,...`
-  * token program id can computed using: `lon_helpers` (FIXME / TODO: commit or find a better place)
-    * `cd ../oracle_node` and `cargo run -p common --example print_program_id -- __HEX_STR__` (use hex string when program has been deployed)
-* Register an oracle node:
-  * Generate `pda_seed` + `to` account: `cd oracle_helper_1 && cargo run`
-  * `spel register --token-def-account 3R413ZmQ7yETsNCEVHmVD4ju9z2GP9HLTEMQb3Ps85rx --oracle-key 0000000000000000000000000000000000000000000000000000000000000001 --from EJg2dB2YWZTQjbBvz3VEhEM2mgvXNRrZ9CkXM6nwXugb --to Egmcm7LRjeEZYPNGNDKd1m81jSjkbpwvZ75Lh6kAdbDn --pda-seed d546e7902066da243a0efa4e4d716b7f78356fa6632adb563fb74ce0a0366d73`
+open a fourth terminal and run:
 
-### Generate client code
+```bash
+./5_check_price.sh
+```
 
-* `spel-client-gen --idl oracle_register-idl.json --out-dir ../oracle_register_client/src`
+Expected output:
 
-### oracle_register_client
+```
+[HH:MM:SS] BTC/USDT = $77,175.96   (round 1705, 1 observation(s))
 
-* `cargo run -- /home/ubuntu/repos/logos_oracle_network/oracle_register/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin /home/ubuntu/lez-programs/programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
+================================================================
+ Setup verified end to end: Binance -> sequencer -> Logos
+ blockchain -> indexer -> oracle_prices contract on LEZ.
+================================================================
+```
 
-## LEZ token program
+Add `--watch` to poll every 10 seconds instead of checking once.
 
-* doc: `https://github.com/logos-blockchain/lez-programs/tree/main/docs/token`
+## Stopping / restarting
 
-* `git clone https://github.com/logos-blockchain/lez-programs.git`
-  * build: `cargo risczero build --manifest-path ./programs/token/methods/guest/Cargo.toml`
-   * deploy: `wallet deploy-program programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
-   * generate idl: `spel generate-idl programs/token/methods/guest/src/bin/token.rs > artifacts/token-idl.json`
-   * See avail cmd: `spel --idl artifacts/token-idl.json --help`
-   * create a token: `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- new-fungible-definition --name "LON" --total-supply 21000 --definition-target-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj --holding-target-account 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --mint-authority none`
-     * Note: create accounts: `wallet account new public --label lon_token_def_account` && `wallet account new public --label lon_token_hold_account`
-   * inspect:
-     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp" --type TokenHolding`
-     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj" --type TokenDefinition`
-  * transfer:
-    * Note: first is required a init account
-    * `wallet account new public --label for_transfer_1`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- initialize-account --account-to-initialize 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK --definition-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK" --type TokenHolding`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- transfer --sender 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --recipient 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK --amount-to-transfer 10`
+- `Ctrl+C` in terminal 3 stops both sequencer and indexer.
+- `Ctrl+C` in terminal 2 stops Logos blockchain (`docker compose down`).
+- `Ctrl+C` in terminal 1 stops LEZ.
 
-## Resources
+To start a fresh session later, terminals 1–2 can simply be re-run — LEZ
+keeps its chain state (and your registered oracle node) in
+`logos-execution-zone/rocksdb`; Logos blockchain resets every time
+`2_start_logos_blockchain.sh` runs (it patches genesis to "now" and drops
+docker volumes, since a stale genesis makes the chain unusable). Once both
+are up, terminal 3 only needs `./4_run_sequencer_indexer.sh` — the one-time
+`3_bootstrap_deploy.sh` doesn't need to run again as long as LEZ's state is
+intact.
 
-* lez-multisig: `https://github.com/logos-co/lez-multisig/blob/main/scripts/DEMO-RUNBOOK.md`
+To wipe everything and start completely clean:
 
-## oracle_prices contract
+```bash
+pkill -f sequencer_service
+rm -rf logos-execution-zone/rocksdb
+rm -rf ~/.lee
+rm -rf ~/local_run ~/local_target
+cd logos-execution-zone && docker compose down -v
+```
 
-* Build
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
-  * `make build`
-  * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
-* Build (no docker)
-  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
-  * `cp -v ~/local_target/oracle_prices/riscv-guest/oracle_prices-methods/oracle_prices-guest/riscv32im-risc0-zkvm-elf/release/oracle_prices.bin  methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
-* Deploy
-  * `make deploy`
-* Init contract
-  * `spel initialize`
-* Init a feed
-  * `spel initialize-feed --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
-* Publish a price
-  * `spel publish-price --feed-id 0000000000000000000000000000000000000000000000000000000000000001 --price 1000 --decimals 8 --valid-count 3 --round 1000 --confidence 4242`
-* Get price
-  * `spel pda feed_price --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
-    * `spel inspect "NjvkDBbwv6dfxHfyGQR7seiGXQwcvDfkYPHmCmURHym" --type PriceState`
-* Get feeds
-  * `spel pda oracle_prices_account`
-    * `spel inspect "5mprrVcUZgyMDRg4RD6pkwMHXK5DbwrPnEGZwm5ZKUHy" --type OraclePricesState` 
+## Known environment quirks (already handled by these scripts)
 
-### oracle_prices contract client
-
-* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
-* build lib: `cargo build --release`
-* run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 
-
-## Logos blockchain setup
-
-* `cd logos-execution-zone`
-  * `docker compose up`
-    * Modification done: 
-      * in `bedrock/node-config.yaml` -> `filter: "!Env {}"`
-      * in `docker-compose.override.yml` -> `RUST_LOG=info,overwatch=warn,overwatch::overwatch=warn`
-  * reset the containers: `docker compose down -v`
-* Setup
-  * `sudo apt install protobuf-compiler`
-* Setup lon repo
-  * `git clone ...`
-  * `git submodule update --init --recursive`
-    * Fix submodule update: `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
-* Run sequencer
-  * Edit `resources/register_contract_config.json` with some contract info
-    * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
-    * `oracle_register_account`: the PDA where oracle_register has been deployed (find when init: `register → 5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk (PDA)`
-    * `oracle_node_funding_account`: an account owned by oracle node that have some LON tokens (for staking)
-    * `token_definition_account`: the account that hold the LON token definition 
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer`
-* Run indexer
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p indexer`
-
-
+- **PyO3 / Xcode Python** — `spel`/`wallet` depend on `pyo3`, which on macOS
+  can try to link against the Python bundled inside Xcode and fail with
+  `library 'python3.9' not found`. The scripts auto-detect a Homebrew Python
+  and set `PYO3_PYTHON`.
+- **Docker on Apple Silicon** — the all-in-one `docker compose` file bundles
+  services LEZ builds locally (`indexer_service`, `explorer_service`,
+  `risc0_base`); on Apple Silicon the `risc0_base` build falls into a
+  build-from-source path that takes ~15 minutes and then fails. The oracle
+  only needs `logos-blockchain-node-0` (a pre-built image), so
+  `2_start_logos_blockchain.sh` starts only that one service.
+- **Genesis time** — `bedrock/deployment-settings.yaml` ships with a fixed
+  past genesis time. If left stale, the sequencer tries to backfill millions
+  of slots and never finishes. `2_start_logos_blockchain.sh` patches it to
+  "now" on every run.
+- **`wallet check-health` on a fresh keystore** — prompts for a password on
+  stdin; if piped/backgrounded carelessly this hangs forever. The scripts
+  poll the TCP port directly instead of calling this command in a loop.
+- **No GNU `timeout` on macOS** — used for a short probe run of `sequencer`
+  to read its generated channel id. The scripts fall back to `gtimeout` or a
+  background-kill shim if `timeout` isn't installed.
+- **`indexer` never filled in `feed_price`** — `oracle_node/indexer/src/prices_contract.rs`
+  sent `AccountId::default()` instead of computing the real PDA, so every
+  `publish_price` call was silently rejected on-chain with
+  `PdaMismatch` even though the indexer logged "Successfully published".
+  Fixed by calling `oracle_prices_client::compute_feed_price_pda(...)`.
+- **`oracle_node/logos-blockchain` pin** — this submodule's exact commit
+  wasn't discoverable from a plain zip export of the project, so
+  `0_build_toolchain.sh` pins it explicitly
+  (`LOGOS_BLOCKCHAIN_PINNED_COMMIT`). If `oracle_node` ever fails to build
+  with a manifest/dependency error mentioning `logos-blockchain`, that pin is
+  the first thing to check against whatever commit the project's own
+  `.gitmodules`/CI actually expects.

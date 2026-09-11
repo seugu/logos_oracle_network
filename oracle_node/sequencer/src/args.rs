@@ -7,7 +7,7 @@ pub struct SequencerArgs {
     /// Logos blockchain node HTTP endpoint
     #[arg(
         long,
-        default_value = "http://localhost:8080",
+        default_value = "http://localhost:18080",
         env = "SEQUENCER_NODE_ENDPOINT"
     )]
     pub node_url: String,

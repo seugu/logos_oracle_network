@@ -66,7 +66,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     
     let provider = "binance";
     // let provider = "redstone";
-    let price_feed_normalized = "ETH/USD";
+    let price_feed_normalized = "BTC/USDT";
     let price_feed_url = cfg.endpoints.get(provider).ok_or(anyhow!("Cannot get an url for provider"))?;
     let price_feed_provider = cfg.feeds.get(provider)
         .ok_or(anyhow!("Cannot get feeds for provider"))?

@@ -1,0 +1,37 @@
+[package]
+name = "common"
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true, default-features = true, features = ["derive"] }
+serde_json.workspace = true
+reqwest = { workspace = true, default-features = false, features = ["json"]}
+tracing = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+bs58 = { version = "0.5.1" }
+tokio = { default-features = false, features = [
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+], version = "1" }
+lb-http-api-common = { workspace = true }
+rust_decimal = "1.42.1"
+pyth-sdk = "0.8" # price decimal conversion
+
+[dev-dependencies]
+wiremock = "0.6"

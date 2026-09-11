@@ -1,0 +1,9 @@
+{
+  "oracle_register_program_id": "17a40fe6d923bab0ac82e2e95cf96f9ab698be56a2a83352f449c07cb3d652a5",
+  "oracle_node_id": "0000000000000000000000000000000000000000000000000000000000000001",
+  "oracle_register_account": "5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk",
+  "oracle_node_funding_account": "EJg2dB2YWZTQjbBvz3VEhEM2mgvXNRrZ9CkXM6nwXugb",
+  "oracle_register_to": "7gCcxi5ZbjXH3RXaiRHzT4Bs9EjHA5cY83nPZpTMYXCZ",
+  "token_definition_account": "3R413ZmQ7yETsNCEVHmVD4ju9z2GP9HLTEMQb3Ps85rx",
+  "oracle_register_to_pda_seed": "d546e7902066da243a0efa4e4d716b7f78356fa6632adb563fb74ce0a0366d73"
+}

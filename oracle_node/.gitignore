@@ -1,0 +1,9 @@
+target
+
+#
+data
+sequencer.key
+
+# IDE
+.idea
+.ai

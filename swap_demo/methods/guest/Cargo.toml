@@ -1,0 +1,21 @@
+[package]
+name = "swap_demo-guest"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "swap_demo"
+path = "src/bin/swap_demo.rs"
+
+[dependencies]
+spel-framework = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
+nssa_core = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0", package = "lee_core" }
+risc0-zkvm = { version = "=3.0.5", features = ["std"] }
+swap_demo_core = { path = "../../swap_demo_core" }
+oracle_prices_core = { path = "../../../oracle_prices/oracle_prices_core" }
+serde = { version = "1.0", features = ["derive"] }
+borsh = "1.5"
+ruint = "=1.17.0"
+token_core = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0" }

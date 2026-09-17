@@ -1,0 +1,10 @@
+[package]
+name = "swap_demo_core"
+version = "0.1.0"
+edition = "2021"
+
+# Kept deliberately thin: pure pricing + PDA seed derivation, so it builds and
+# tests on the host in milliseconds and adds nothing but sha2 (which risc0
+# accelerates) to the guest circuit.
+[dependencies]
+sha2 = "0.10"

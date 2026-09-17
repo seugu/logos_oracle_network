@@ -1,0 +1,12 @@
+[package]
+name = "pda_seed_tool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.104"
+spel-framework = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
+risc0-zkvm = { version = "=3.0.5", features = ["std", "getrandom"] }
+hex = "0.4.3"
+bs58 = { version = "0.5.1" }
+swap_demo_core = { path = "../swap_demo_core" }

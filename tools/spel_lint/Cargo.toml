@@ -1,0 +1,9 @@
+[package]
+name = "spel_lint"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "extra-traits", "parsing", "printing", "visit"] }
+quote = "1"
+proc-macro2 = "1"

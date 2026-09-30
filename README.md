@@ -1,161 +1,157 @@
-# Logos Oracle Network (LON)
+# lon-oracle-lag
 
-## LEZ dev setup
+Measuring how stale a push oracle's price gets between updates, using real
+Binance 1-second data.
 
-* Base: Ubuntu 24.04 + rustup + docker
+A push oracle republishes on a fixed cadence. Between two updates the on-chain
+price is frozen while the market keeps moving, so a gap opens: anyone who can
+see both numbers can trade against the stale one. This repo measures that gap
+on real data instead of estimating it from a volatility model.
 
-* to install: sudo apt install unzip python3.12-dev pkgconf libpcsclite-dev
-* From tutorial.md in https://github.com/logos-co/spel/pull/138
-  * RISC0 toolchain: https://dev.risczero.com/api/zkvm/install
-  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cd spel` && `git checkout v0.6.0`  && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
-  * Compile logos execution zone: `git clone https://github.com/logos-blockchain/logos-execution-zone.git && cd logos-execution-zone && git checkout v0.2.0`
-    * Find the logos execution zone version in spel/spel-framework/Cargo.toml
-    * Compile: `cargo build --release --features standalone -p sequencer_service` && `cargo build --release -p wallet`
-  * Add spel & logos exec zone bin into $PATH: `vim ~/.bashrc` && set to `export PATH="$PATH:/home/ubuntu/.risc0/bin:/home/ubuntu/logos-execution-zone/target/release/:/home/ubuntu/spel/target/debug`
-  * Test the setup: `wallet --version`, `spel --version`
+Written to check an assumption in the
+[Logos Oracle Network](https://github.com/logos-blockchain) design, where the
+publish cadence is roughly two minutes. Nothing here is specific to LON —
+point it at any symbol and any window length.
 
-## Launch the logos execution zone
+## Quick start
 
-RUST_LOG=info cargo run --features standalone -p sequencer_service -- lez/sequencer/service/configs/debug/sequencer_config.json
+```bash
+./fetch-data.sh                # downloads two sample days of BTCUSDT
+./run.sh                       # 120s windows, 0.5% threshold
+```
 
-Note: 
-* reset sequencer: `rm -rf logos-execution-zone/rocksdb`
+Fetch whatever span you want:
 
-## Wallet
+```bash
+./fetch-data.sh --days 10                    # last 10 available days
+./fetch-data.sh --days 10 --end 2026-08-25   # 10 days ending on a date
+./fetch-data.sh --symbol ETHUSDT --days 5
+./fetch-data.sh 2026-08-20 2026-09-08        # explicit dates
+./fetch-data.sh --days 30 --dry-run          # list without downloading
+```
 
-* Create a public account
-  * `wallet account new public`
-* List accounts
-  * `wallet account list`
+Binance publishes a day's file the next day, so `--end` defaults to yesterday
+(UTC) and the most recent day or two may 404 until the archive catches up. Days
+already in `./data` are skipped, so re-running to extend a range is cheap. Each
+day is about 2.5 MB zipped.
 
-Note:
-* delete wallet info: `rm -rf ~/.lee`
+`run.sh` unpacks each zip in `./data` one at a time and runs the analysis over
+the extracted CSVs. Everything else is a flag:
 
-## Deploy contract & interact with
+```bash
+./run.sh --window 60 --threshold 0.25
+./run.sh --phase 10                       # shift the update schedule by 10s
+./run.sh --phase-sweep --sweep-step 10    # try every alignment
+./run.sh --csv windows.csv --json out.json
+./run.sh --data-dir /some/other/folder
+```
 
-* make deploy
-  * OR (manual way): `wallet deploy-program methods/guest/target/riscv32im-risc0-zkvm-elf/docker/my_counter.bin`
-  * Sequencer logs: `Validated transaction with hash c8f138b1d34ba952978fcf86bcb53119c0c6f3ed10287bb36534de6d649f5aea, including it in block`
-* init contract: 
-  * `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
-* increment contract:
-  * `spel increment --amount 5 --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
-* read counter:
-  * `spel pda counter`
-  * `spel inspect "G1gkRm62LdJ2XWpj5NBHeHgdNgjrzqQuPnW4CL8GqNjm" --type CounterState`
+`analyze.py` works standalone too, on `.zip` or `.csv`:
 
-## Oracle register contract
+```bash
+./analyze.py data/BTCUSDT-1s-2026-08-20.zip --window 120
+```
 
-### Build
+Python 3.9+, standard library only. No API key — `data.binance.vision` is public.
 
-* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
-* Faster dev build (still requires the CARGO_TARGET_DIR export):
-  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
-* Generate idl
-  * `spel generate-idl methods/guest/src/bin/oracle_register.rs > oracle_register-idl.json`
+## What it measures
 
-### Deploy
+Two numbers per window, both relative to the price the oracle last published:
 
-* Copy file
-  * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
-  * dev build: `cp -v /home/ubuntu/local_target/oracle_register/riscv-guest/oracle_register-methods/oracle_register-guest/riscv32im-risc0-zkvm-elf/release/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin`
-* `make deploy`
-* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3 --token-program-id 0,0,...`
-  * token program id can computed using: `lon_helpers` (FIXME / TODO: commit or find a better place)
-    * `cd ../oracle_node` and `cargo run -p common --example print_program_id -- __HEX_STR__` (use hex string when program has been deployed)
-* Register an oracle node:
-  * Generate `pda_seed` + `to` account: `cd oracle_helper_1 && cargo run`
-  * `spel register --token-def-account 3R413ZmQ7yETsNCEVHmVD4ju9z2GP9HLTEMQb3Ps85rx --oracle-key 0000000000000000000000000000000000000000000000000000000000000001 --from EJg2dB2YWZTQjbBvz3VEhEM2mgvXNRrZ9CkXM6nwXugb --to Egmcm7LRjeEZYPNGNDKd1m81jSjkbpwvZ75Lh6kAdbDn --pda-seed d546e7902066da243a0efa4e4d716b7f78356fa6632adb563fb74ce0a0366d73`
+**endpoint** — `(close[t+W] - close[t]) / close[t]`
+How far off the published price is by the moment of the next update.
 
-### Generate client code
+**intra-window** — `max over the window of |high or low - close[t]| / close[t]`
+The worst gap that existed at *any instant* while the price was stale. This is
+the number that matters for arbitrage: a gap is exploitable the moment it
+opens, not only at the window boundary. It is always the larger of the two.
 
-* `spel-client-gen --idl oracle_register-idl.json --out-dir ../oracle_register_client/src`
+For each the script reports median / p90 / p99 / max, plus how many windows
+breached the threshold, as a count and as a percentage.
 
-### oracle_register_client
+## Why `--phase` exists
 
-* `cargo run -- /home/ubuntu/repos/logos_oracle_network/oracle_register/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin /home/ubuntu/lez-programs/programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
+A fixed 120-second schedule can start at any second of the minute, and where
+the boundaries land changes which price moves get split across two windows and
+which land inside one. That is an arbitrary implementation detail, not a
+property of the market — so if the answer moves when you shift it, the answer
+was never robust.
 
-## LEZ token program
+It moves a lot. On 2026-08-20, sweeping the phase across the whole window:
 
-* doc: `https://github.com/logos-blockchain/lez-programs/tree/main/docs/token`
+| phase | endpoint breaches | intra breaches | worst endpoint | worst intra |
+|------:|------------------:|---------------:|---------------:|------------:|
+| 0     | 7                 | 8              | 0.660%         | 0.705%      |
+| 20    | 5                 | 10             | 0.720%         | 0.785%      |
+| 40    | 1                 | 10             | 0.820%         | 0.820%      |
+| 60    | 1                 | 6              | 0.891%         | **1.021%**  |
+| 80    | 1                 | 4              | 0.691%         | 0.742%      |
+| 100   | 4                 | 5              | 0.761%         | 0.868%      |
 
-* `git clone https://github.com/logos-blockchain/lez-programs.git`
-  * build: `cargo risczero build --manifest-path ./programs/token/methods/guest/Cargo.toml`
-   * deploy: `wallet deploy-program programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
-   * generate idl: `spel generate-idl programs/token/methods/guest/src/bin/token.rs > artifacts/token-idl.json`
-   * See avail cmd: `spel --idl artifacts/token-idl.json --help`
-   * create a token: `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- new-fungible-definition --name "LON" --total-supply 21000 --definition-target-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj --holding-target-account 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --mint-authority none`
-     * Note: create accounts: `wallet account new public --label lon_token_def_account` && `wallet account new public --label lon_token_hold_account`
-   * inspect:
-     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp" --type TokenHolding`
-     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj" --type TokenDefinition`
-  * transfer:
-    * Note: first is required a init account
-    * `wallet account new public --label for_transfer_1`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- initialize-account --account-to-initialize 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK --definition-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK" --type TokenHolding`
-    * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- transfer --sender 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --recipient 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK --amount-to-transfer 10`
+Endpoint breaches range from 1 to 7 on the same day with the same data. The
+worst intra-window gap ranges from 0.71% to 1.02%. Quoting a single breach
+count without saying which alignment produced it is close to meaningless — run
+`--phase-sweep` and report the range.
 
-## Resources
+Note the two columns move in opposite directions. An alignment that splits a
+sharp move across two windows lowers the endpoint count while *raising* the
+intra-window one: the gap was still there, the endpoint measurement just missed
+it. Another reason to treat intra-window as the honest number.
 
-* lez-multisig: `https://github.com/logos-co/lez-multisig/blob/main/scripts/DEMO-RUNBOOK.md`
+## Results on the two sample days
 
-## oracle_prices contract
+120-second windows, 0.5% threshold, phase 0. 719 windows per day.
 
-* Build
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
-  * `make build`
-  * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
-* Build (no docker)
-  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
-  * `cp -v ~/local_target/oracle_prices/riscv-guest/oracle_prices-methods/oracle_prices-guest/riscv32im-risc0-zkvm-elf/release/oracle_prices.bin  methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
-* Deploy
-  * `make deploy`
-* Init contract
-  * `spel initialize`
-* Init a feed
-  * `spel initialize-feed --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
-* Publish a price
-  * `spel publish-price --feed-id 0000000000000000000000000000000000000000000000000000000000000001 --price 1000 --decimals 8 --valid-count 3 --round 1000 --confidence 4242`
-* Get price
-  * `spel pda feed_price --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
-    * `spel inspect "NjvkDBbwv6dfxHfyGQR7seiGXQwcvDfkYPHmCmURHym" --type PriceState`
-* Get feeds
-  * `spel pda oracle_prices_account`
-    * `spel inspect "5mprrVcUZgyMDRg4RD6pkwMHXK5DbwrPnEGZwm5ZKUHy" --type OraclePricesState` 
+| | 2026-09-08 (calm) | 2026-08-20 (volatile) |
+|---|---|---|
+| day high/low range | +2.40% | +6.53% |
+| day open→close | −0.83% | +5.32% |
+| endpoint median | 0.033% | 0.056% |
+| endpoint p99 | 0.194% | 0.419% |
+| endpoint max | 0.313% | 0.660% |
+| **endpoint breaches >0.5%** | **0 of 719** | **7 of 719** (0.97%) |
+| intra-window max | 0.336% | 0.705% |
+| **intra breaches >0.5%** | **0 of 719** | **8 of 719** (1.11%) |
 
-### oracle_prices contract client
+On a calm day a two-minute oracle never drifts past 0.5% — not once in 719
+windows, with the largest gap all day at 0.34%. On a volatile day it happens
+7–8 times, clustered into a few minutes of real time (six of the eight fall
+between 08:06 and 08:16 UTC), peaking at 0.70% and reaching 1.02% under a less
+lucky alignment.
 
-* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
-* build lib: `cargo build --release`
-* run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 
+Worth keeping in proportion: lending and stablecoin collateral margins are
+typically 5–20%, so a sub-1% transient gap is well inside them. A perpetuals
+venue is a different story, and LON's RFC puts perps out of scope.
 
-## Logos blockchain setup
+## Data format
 
-* `cd logos-execution-zone`
-  * `docker compose up`
-    * Modification done: 
-      * in `bedrock/node-config.yaml` -> `filter: "!Env {}"`
-      * in `docker-compose.override.yml` -> `RUST_LOG=info,overwatch=warn,overwatch::overwatch=warn`
-  * reset the containers: `docker compose down -v`
-* Setup
-  * `sudo apt install protobuf-compiler`
-* Setup lon repo
-  * `git clone ...`
-  * `git submodule update --init --recursive`
-    * Fix submodule update: `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
-* Run sequencer
-  * Edit `resources/register_contract_config.json` with some contract info
-    * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
-    * `oracle_register_account`: the PDA where oracle_register has been deployed (find when init: `register → 5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk (PDA)`
-    * `oracle_node_funding_account`: an account owned by oracle node that have some LON tokens (for staking)
-    * `token_definition_account`: the account that hold the LON token definition 
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer`
-* Run indexer
-  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p indexer`
+Binance daily 1-second klines, as published at
+`https://data.binance.vision/data/spot/daily/klines/<SYMBOL>/1s/`.
 
+Headerless CSV, one row per second, 86400 rows per day:
 
+```
+open_time, open, high, low, close, volume, close_time,
+quote_volume, trades, taker_buy_base, taker_buy_quote, ignore
+```
+
+`open_time` is auto-detected as seconds, milliseconds or microseconds, so
+files from different eras of the archive both work.
+
+## Caveats
+
+- **One venue.** Binance spot only. A real oracle takes a median across
+  several sources, which dampens single-venue noise — so these figures are
+  closer to an upper bound on the gap than a prediction of it.
+- **Two days.** The figures above are one calm and one volatile day, chosen to
+  bracket the range rather than to be a distribution. For a real distribution
+  run `./fetch-data.sh --days 30 && ./run.sh --phase-sweep`.
+- **OHLC granularity.** The intra-window figure uses each second's high/low, so
+  it catches sub-second spikes only to the extent a one-second bar records
+  them. Tick data would give a slightly larger number.
+- **No execution modelling.** A measured gap is an opportunity, not a profit:
+  fees, slippage, gas and the size the pool can absorb all cut into it.
+
+## License
+
+MIT

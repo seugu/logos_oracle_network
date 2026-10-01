@@ -99,7 +99,20 @@ negative: below). Dashed lines mark the +/-0.5% threshold.*
 ./fetch-data.sh --days 20 --end 2026-09-29
 for p in 0 5 10 15 20; do ./run.sh --window 120 --threshold 0.5 --phase $p; done
 ```
+This downloaded the last 20 days prices in `data` folder. Then,
 
-`--window 120` and `--threshold 0.5` are the defaults. `per_day.csv` has every
-day and phase; `breach_events.csv` lists every breaching window. Tool:
-`tools/lon-oracle-lag` in this repository.
+```bash
+./run.sh --window 120 --threshold 0.5 --phase 0
+./run.sh --window 120 --threshold 0.5 --phase 5
+./run.sh --window 120 --threshold 0.5 --phase 10
+./run.sh --window 120 --threshold 0.5 --phase 15
+```
+These scripts count that within 120 seconds intervals, if there are changes more than %0.5 with different phases,
+phases delay the start of the update schedule by seconds, so the first
+window starts at 00:00:N instead of 00:00:00 and the following ones at
+00:02:N, 00:04:N, and so on. The real oracle's update clock is not aligned to
+anything in the market, so the exact second at which windows start is arbitrary.
+Running several phases checks that the result does not depend on that choice: if
+the breach count barely moves between phases (here 34 to 41 intra-window
+breaches), the result is robust. If it moved a lot, the single count would
+depend on where the window boundaries happened to fall.

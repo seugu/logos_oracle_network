@@ -3,15 +3,14 @@
 Measuring how stale a push oracle's price gets between updates, using real
 Binance 1-second data.
 
-A push oracle republishes on a fixed cadence. Between two updates the on-chain
+LON is a push oracle republishes on a fixed cadence, around 2 minutes. Between two updates the on-chain
 price is frozen while the market keeps moving, so a gap opens: anyone who can
-see both numbers can trade against the stale one. This repo measures that gap
+see both numbers can trade against the stale one. This repo measures LON's gap
 on real data instead of estimating it from a volatility model.
 
 Written to check an assumption in the
-[Logos Oracle Network](https://github.com/logos-blockchain) design, where the
-publish cadence is roughly two minutes. Nothing here is specific to LON —
-point it at any symbol and any window length.
+[Logos Oracle Network](https://github.com/sydhds/logos_oracle_network) design, 
+comparing with the subsecond oracles that wait for %0.5 changes due to saving gas. 
 
 ## Quick start
 
@@ -143,12 +142,6 @@ files from different eras of the archive both work.
 - **One venue.** Binance spot only. A real oracle takes a median across
   several sources, which dampens single-venue noise — so these figures are
   closer to an upper bound on the gap than a prediction of it.
-- **Two days.** The figures above are one calm and one volatile day, chosen to
-  bracket the range rather than to be a distribution. For a real distribution
-  run `./fetch-data.sh --days 30 && ./run.sh --phase-sweep`.
-- **OHLC granularity.** The intra-window figure uses each second's high/low, so
-  it catches sub-second spikes only to the extent a one-second bar records
-  them. Tick data would give a slightly larger number.
 - **No execution modelling.** A measured gap is an opportunity, not a profit:
   fees, slippage, gas and the size the pool can absorb all cut into it.
 

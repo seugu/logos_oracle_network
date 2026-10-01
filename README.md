@@ -12,6 +12,8 @@ Written to check an assumption in the
 [Logos Oracle Network](https://github.com/sydhds/logos_oracle_network) design, 
 comparing with the subsecond oracles that wait for %0.5 changes due to saving gas. 
 
+See the [REPORT](https://github.com/seugu/logos_oracle_network/blob/oracle-analysis/report.md) that evaulates LON with real BTC/USDT data.
+
 ## Quick start
 
 ```bash

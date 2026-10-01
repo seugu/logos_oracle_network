@@ -3,6 +3,12 @@
 Measuring how stale a push oracle's price gets between updates, using real
 Binance 1-second data.
 
+This repository contains no LON code. It is a standalone market-data analysis,
+built only on the assumption that in the happy path (no dispute) the Logos
+Oracle Network publishes a price about every 2 minutes, end to end. The window
+length, threshold and symbol are parameters, so the same tool applies to any
+push oracle.
+
 LON is a push oracle republishes on a fixed cadence, around 2 minutes. Between two updates the on-chain
 price is frozen while the market keeps moving, so a gap opens: anyone who can
 see both numbers can trade against the stale one. This repo measures LON's gap
